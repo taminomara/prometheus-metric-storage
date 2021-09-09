@@ -1,5 +1,6 @@
 //! Derive macro to instantiate prometheus metrics with ease.
 // TODO: docs
+// nlordell: Would be nice to have docs as @vkgnosis mentioned.
 
 #![deny(missing_docs)]
 
@@ -17,6 +18,8 @@ use std::sync::Mutex;
 pub use prometheus::{Error, Opts, Registry, Result};
 
 #[doc(hidden)]
+// nlordell: Any reason why these are hidden? I would expect this to have link
+// to the procedural macro docs.
 pub use prometheus_metric_storage_derive::MetricStorage;
 
 /// Identifier of a single storage in [`StorageRegistry`].
@@ -50,6 +53,14 @@ impl StorageRegistry {
     /// Convert this wrapper into the underlying [`Registry`].
     ///
     /// All information about registered storages is lost.
+    // nlordell: Doesn't this potentially drop the `storages` map and therefore
+    // the `Pin<Box<...>>`s static reference no longer valid? For example:
+    // ```
+    // let storage = StorageRegistry::new(...);
+    // let x: &'static MyMetrics = storage.get_or_create_storage(...);
+    // let _ = storage.into_registry();
+    // *x; // UB - use after free
+    // ```
     pub fn into_registry(self) -> Registry {
         self.registry
     }
@@ -107,6 +118,8 @@ impl StorageRegistry {
                 }
             };
 
+        // nlordell: nit: Maybe put the `unsafe` only around the unsafe part,
+        // so here turning a `'_` reference into a `'static` one.
             Ok(&*(storage as *const T))
         }
     }
@@ -146,6 +159,7 @@ impl StorageRegistry {
                 }
             };
 
+        // nlordell: Same nit as above.
             Ok(&*(storage as *const T))
         }
     }
