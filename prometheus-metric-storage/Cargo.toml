@@ -9,8 +9,8 @@ homepage = "https://github.com/taminomara/prometheus-metric-storage"
 documentation = "https://docs.rs/prometheus-metric-storage"
 description = "Derive macro to instantiate and register prometheus metrics without having to write tons of boilerplate code"
 readme = "../README.md"
+rust-version = "1.80.0"
 
 [dependencies]
 prometheus = {version = "0.14", default_features=false}
 prometheus-metric-storage-derive = { version = "0.5.0", path = "../prometheus-metric-storage-derive" }
-lazy_static = "1.4"

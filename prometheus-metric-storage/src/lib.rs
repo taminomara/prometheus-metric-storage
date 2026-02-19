@@ -359,7 +359,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::pin::Pin;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 #[doc(hidden)]
 pub use prometheus::{Error, Opts, Registry, Result};
@@ -565,11 +565,8 @@ impl Debug for StorageRegistry {
 
 /// Get the default storage registry that uses [`prometheus::default_registry`].
 pub fn default_storage_registry() -> &'static StorageRegistry {
-    lazy_static::lazy_static! {
-        static ref REGISTRY: StorageRegistry =
-            StorageRegistry::new(prometheus::default_registry().clone());
-    }
-
+    static REGISTRY: LazyLock<StorageRegistry> =
+        LazyLock::new(|| StorageRegistry::new(prometheus::default_registry().clone()));
     &REGISTRY as &StorageRegistry
 }
 
