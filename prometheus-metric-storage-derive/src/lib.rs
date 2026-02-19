@@ -6,11 +6,9 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, quote_spanned, ToTokens};
+use syn::parse::Parse;
 use syn::spanned::Spanned;
-use syn::{
-    parse_macro_input, Data, DeriveInput, Error, Field, Fields, Index, Lit, Meta, MetaList,
-    NestedMeta, Result,
-};
+use syn::{parse_macro_input, Data, DeriveInput, Error, Field, Fields, Index, Lit, Meta, Result};
 
 #[proc_macro_derive(MetricStorage, attributes(metric))]
 pub fn metric_storage(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -225,48 +223,28 @@ impl MetricAttrs {
         let mut doc = None;
 
         for attr in attrs {
-            if attr.path.is_ident("metric") {
-                let list = match attr.parse_meta()? {
-                    Meta::List(list) => list,
-                    _ => {
-                        return Err(Error::new(
-                            attr.path.span(),
-                            "value for the `metric` attribute should be a list: `metric(...)`",
-                        ))
-                    }
-                };
-
-                for attr in list.nested {
-                    let attr = match attr {
-                        NestedMeta::Meta(attr) => attr,
-                        NestedMeta::Lit(lit) => {
-                            return Err(Error::new(lit.span(), "expected a named parameter"))
-                        }
-                    };
-
-                    let path = attr.path();
-                    if is_struct_level && path.is_ident("subsystem") {
-                        result.parse_subsystem(attr)?
-                    } else if !is_struct_level && path.is_ident("name") {
-                        result.parse_name(attr)?
-                    } else if !is_struct_level && path.is_ident("help") {
-                        result.parse_help(attr)?
-                    } else if path.is_ident("labels") {
-                        result.parse_labels(attr)?
-                    } else if !is_struct_level && path.is_ident("buckets") {
-                        result.parse_buckets(attr)?
+            if attr.path().is_ident("metric") {
+                attr.parse_nested_meta(|meta| {
+                    if is_struct_level && meta.path.is_ident("subsystem") {
+                        result.parse_subsystem(&meta)
+                    } else if !is_struct_level && meta.path.is_ident("name") {
+                        result.parse_name(&meta)
+                    } else if !is_struct_level && meta.path.is_ident("help") {
+                        result.parse_help(&meta)
+                    } else if meta.path.is_ident("labels") {
+                        result.parse_labels(&meta)
+                    } else if !is_struct_level && meta.path.is_ident("buckets") {
+                        result.parse_buckets(&meta)
                     } else {
-                        return Err(Error::new(path.span(), "unexpected parameter"));
+                        Err(meta.error("unexpected parameter"))
+                    }
+                })?;
+            } else if doc.is_none() && attr.path().is_ident("doc") {
+                if let Meta::NameValue(ref nv) = attr.meta {
+                    if let Ok(lit_str) = syn::parse2::<syn::LitStr>(nv.value.to_token_stream()) {
+                        doc = Some(lit_str.value().trim().to_string());
                     }
                 }
-            } else if doc.is_none() && attr.path.is_ident("doc") {
-                doc = match attr.parse_meta()? {
-                    Meta::NameValue(kv) => match kv.lit {
-                        Lit::Str(s) => Some(s.value().trim().to_string()),
-                        _ => None,
-                    },
-                    _ => None,
-                };
             }
         }
 
@@ -277,85 +255,66 @@ impl MetricAttrs {
         Ok(result)
     }
 
-    fn parse_subsystem(&mut self, meta: Meta) -> Result<()> {
-        Self::check_none("subsystem", meta.path().span(), self.subsystem.is_some())?;
+    fn parse_subsystem(&mut self, meta: &syn::meta::ParseNestedMeta) -> Result<()> {
+        Self::check_none("subsystem", meta.path.span(), self.subsystem.is_some())?;
 
-        self.subsystem = Some(Self::value_to_string(Self::meta_to_value(meta)?)?);
-
-        Ok(())
-    }
-
-    fn parse_name(&mut self, meta: Meta) -> Result<()> {
-        Self::check_none("name", meta.path().span(), self.name.is_some())?;
-
-        self.name = Some(Self::value_to_string(Self::meta_to_value(meta)?)?);
+        self.subsystem = Some(meta.value()?.parse::<syn::LitStr>()?.value());
 
         Ok(())
     }
 
-    fn parse_help(&mut self, meta: Meta) -> Result<()> {
-        Self::check_none("help", meta.path().span(), self.help.is_some())?;
+    fn parse_name(&mut self, meta: &syn::meta::ParseNestedMeta) -> Result<()> {
+        Self::check_none("name", meta.path.span(), self.name.is_some())?;
 
-        self.help = Some(Self::value_to_string(Self::meta_to_value(meta)?)?);
+        self.name = Some(meta.value()?.parse::<syn::LitStr>()?.value());
 
         Ok(())
     }
 
-    fn parse_labels(&mut self, meta: Meta) -> Result<()> {
-        Self::check_none("labels", meta.path().span(), self.labels.is_some())?;
+    fn parse_help(&mut self, meta: &syn::meta::ParseNestedMeta) -> Result<()> {
+        Self::check_none("help", meta.path.span(), self.help.is_some())?;
+
+        self.help = Some(meta.value()?.parse::<syn::LitStr>()?.value());
+
+        Ok(())
+    }
+
+    fn parse_labels(&mut self, meta: &syn::meta::ParseNestedMeta) -> Result<()> {
+        Self::check_none("labels", meta.path.span(), self.labels.is_some())?;
+
+        let content;
+        syn::parenthesized!(content in meta.input);
+        let lit_strs: syn::punctuated::Punctuated<syn::LitStr, syn::Token![,]> =
+            content.parse_terminated(|input| input.parse(), syn::Token![,])?;
 
         let mut labels = Vec::new();
-        for label in Self::meta_to_list(meta)?.nested {
-            let label_span = label.span();
-            let value = Self::value_to_string(Self::nested_meta_to_value(label)?)?;
+        for lit in lit_strs {
+            let value = lit.value();
             if labels.contains(&value) {
-                return Err(Error::new(label_span, "duplicate label"));
+                return Err(Error::new(lit.span(), "duplicate label"));
             }
-            labels.push(value)
+            labels.push(value);
         }
         self.labels = Some(labels);
 
         Ok(())
     }
 
-    fn parse_buckets(&mut self, meta: Meta) -> Result<()> {
-        Self::check_none("buckets", meta.path().span(), self.buckets.is_some())?;
+    fn parse_buckets(&mut self, meta: &syn::meta::ParseNestedMeta) -> Result<()> {
+        Self::check_none("buckets", meta.path.span(), self.buckets.is_some())?;
+
+        let content;
+        syn::parenthesized!(content in meta.input);
+        let lits: syn::punctuated::Punctuated<Lit, syn::Token![,]> =
+            content.parse_terminated(Lit::parse, syn::Token![,])?;
 
         let mut buckets = Vec::new();
-        for label in Self::meta_to_list(meta)?.nested {
-            buckets.push(Self::value_to_float(Self::nested_meta_to_value(label)?)?)
+        for lit in lits {
+            buckets.push(Self::value_to_float(lit)?);
         }
         self.buckets = Some(buckets);
 
         Ok(())
-    }
-
-    fn meta_to_value(meta: Meta) -> Result<Lit> {
-        match meta {
-            Meta::NameValue(kv) => Ok(kv.lit),
-            _ => Err(Error::new(meta.path().span(), "expected a value")),
-        }
-    }
-
-    fn nested_meta_to_value(meta: NestedMeta) -> Result<Lit> {
-        match meta {
-            NestedMeta::Lit(lit) => Ok(lit),
-            _ => Err(Error::new(meta.span(), "expected a value")),
-        }
-    }
-
-    fn meta_to_list(meta: Meta) -> Result<MetaList> {
-        match meta {
-            Meta::List(list) => Ok(list),
-            _ => Err(Error::new(meta.path().span(), "expected a list of values")),
-        }
-    }
-
-    fn value_to_string(lit: Lit) -> Result<String> {
-        match lit {
-            Lit::Str(s) => Ok(s.value()),
-            _ => Err(Error::new(lit.span(), "expected a string")),
-        }
     }
 
     fn value_to_float(lit: Lit) -> Result<f64> {

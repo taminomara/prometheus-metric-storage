@@ -49,7 +49,7 @@ fn subsystem_prefixes_metric_name() {
     m.requests_total.inc();
 
     let families = registry.gather();
-    let names: Vec<_> = families.iter().map(|f| f.get_name()).collect();
+    let names: Vec<_> = families.iter().map(|f| f.name()).collect();
     assert!(
         names.contains(&"http_requests_total"),
         "expected 'http_requests_total' in {:?}",
@@ -152,8 +152,8 @@ fn help_override() {
     m.counter.inc();
 
     let families = registry.gather();
-    let family = families.iter().find(|f| f.get_name() == "counter").unwrap();
-    assert_eq!(family.get_help(), "Explicit help message.");
+    let family = families.iter().find(|f| f.name() == "counter").unwrap();
+    assert_eq!(family.help(), "Explicit help message.");
 }
 
 // --- Doc comment becomes help text ---
@@ -170,8 +170,8 @@ fn doc_comment_becomes_help() {
     let _m = DocHelpMetrics::new(&registry).unwrap();
 
     let families = registry.gather();
-    let family = families.iter().find(|f| f.get_name() == "items").unwrap();
-    assert_eq!(family.get_help(), "Number of items processed.");
+    let family = families.iter().find(|f| f.name() == "items").unwrap();
+    assert_eq!(family.help(), "Number of items processed.");
 }
 
 // --- Help attribute without doc comment ---
@@ -188,11 +188,8 @@ fn help_without_doc_comment() {
     let _m = HelpNoDoccMetrics::new(&registry).unwrap();
 
     let families = registry.gather();
-    let family = families
-        .iter()
-        .find(|f| f.get_name() == "bytes_sent")
-        .unwrap();
-    assert_eq!(family.get_help(), "Bytes sent over the wire.");
+    let family = families.iter().find(|f| f.name() == "bytes_sent").unwrap();
+    assert_eq!(family.help(), "Bytes sent over the wire.");
 }
 
 // --- Name override ---
@@ -211,7 +208,7 @@ fn name_override() {
     m.my_internal_field.inc();
 
     let families = registry.gather();
-    let names: Vec<_> = families.iter().map(|f| f.get_name()).collect();
+    let names: Vec<_> = families.iter().map(|f| f.name()).collect();
     assert!(
         names.contains(&"events_total"),
         "expected 'events_total' in {:?}",
@@ -373,13 +370,9 @@ fn combined_attributes() {
     m.sessions.set(5);
 
     let families = registry.gather();
-    let names: Vec<_> = families.iter().map(|f| f.get_name()).collect();
+    let names: Vec<_> = families.iter().map(|f| f.name()).collect();
     assert!(names.contains(&"api_calls"), "names: {:?}", names);
-    assert!(
-        names.contains(&"api_call_duration"),
-        "names: {:?}",
-        names
-    );
+    assert!(names.contains(&"api_call_duration"), "names: {:?}", names);
     assert!(
         names.contains(&"api_active_sessions_total"),
         "names: {:?}",
@@ -436,6 +429,6 @@ fn manual_register_after_new_unregistered() {
 
     m.register(&registry).unwrap();
     let families = registry.gather();
-    let names: Vec<_> = families.iter().map(|f| f.get_name()).collect();
+    let names: Vec<_> = families.iter().map(|f| f.name()).collect();
     assert!(names.contains(&"gauge"), "names: {:?}", names);
 }
