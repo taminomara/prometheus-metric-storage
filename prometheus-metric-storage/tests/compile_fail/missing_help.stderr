@@ -1,0 +1,5 @@
+error: metric help message is required, consider adding a docstring
+ --> tests/compile_fail/missing_help.rs:5:5
+  |
+5 |     counter: prometheus::IntCounter,
+  |     ^^^^^^^

@@ -1,0 +1,5 @@
+error: duplicate label
+ --> tests/compile_fail/duplicate_field_label.rs:6:31
+  |
+6 |     #[metric(labels("status", "status"))]
+  |                               ^^^^^^^^

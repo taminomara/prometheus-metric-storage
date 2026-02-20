@@ -1,0 +1,5 @@
+error: unexpected parameter
+ --> tests/compile_fail/unexpected_param.rs:4:10
+  |
+4 | #[metric(unknown = "value")]
+  |          ^^^^^^^

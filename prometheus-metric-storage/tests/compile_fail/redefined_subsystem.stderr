@@ -1,0 +1,5 @@
+error: subsystem is redefined
+ --> tests/compile_fail/redefined_subsystem.rs:4:27
+  |
+4 | #[metric(subsystem = "a", subsystem = "b")]
+  |                           ^^^^^^^^^
